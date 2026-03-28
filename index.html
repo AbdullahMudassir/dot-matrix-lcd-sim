@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dot Matrix LCD Simulator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #cfd8e3;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: #16213e;
+      border-bottom: 1px solid #253550;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    header h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #7eb8f7;
+      letter-spacing: 1px;
+    }
+
+    .main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 256px;
+      min-width: 256px;
+      background: #16213e;
+      border-right: 1px solid #253550;
+      padding: 14px 14px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .sidebar section h2 {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #7eb8f7;
+      border-bottom: 1px solid #253550;
+      padding-bottom: 5px;
+      margin-bottom: 10px;
+    }
+
+    .control { margin-bottom: 10px; }
+
+    .control-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.76rem;
+      color: #8a9bb0;
+      margin-bottom: 4px;
+    }
+
+    .control-label .val {
+      color: #7eb8f7;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      min-width: 36px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      cursor: pointer;
+      accent-color: #7eb8f7;
+    }
+
+    .res-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .res-row input[type="number"] {
+      flex: 1;
+      background: #0d1f3c;
+      border: 1px solid #253550;
+      color: #cfd8e3;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    .res-row input[type="number"]:focus { outline: none; border-color: #7eb8f7; }
+    .res-row span { color: #506070; }
+
+    select {
+      width: 100%;
+      background: #0d1f3c;
+      border: 1px solid #253550;
+      color: #cfd8e3;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+    select:focus { outline: none; border-color: #7eb8f7; }
+
+    /* ── Content ── */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .display-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0d1525;
+      padding: 20px;
+      overflow: auto;
+    }
+
+    #lcd-canvas {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      border-radius: 2px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+    }
+
+    .info-bar {
+      font-size: 0.68rem;
+      color: #4a6070;
+      padding: 3px 16px;
+      background: #0d1525;
+      border-top: 1px solid #1a2540;
+      display: flex;
+      gap: 20px;
+      flex-shrink: 0;
+    }
+
+    .info-bar .val { color: #5a8aaa; }
+
+    .input-area {
+      background: #16213e;
+      border-top: 1px solid #253550;
+      padding: 10px 14px 12px;
+      flex-shrink: 0;
+    }
+
+    .input-area h2 {
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #7eb8f7;
+      margin-bottom: 7px;
+    }
+
+    #markdown-input {
+      width: 100%;
+      height: 140px;
+      background: #0d1525;
+      border: 1px solid #253550;
+      color: #cfd8e3;
+      padding: 8px 10px;
+      border-radius: 4px;
+      font-family: 'Courier New', 'Consolas', monospace;
+      font-size: 0.8rem;
+      line-height: 1.55;
+      resize: vertical;
+    }
+
+    #markdown-input:focus { outline: none; border-color: #7eb8f7; }
+
+    .hint {
+      font-size: 0.66rem;
+      color: #3a5060;
+      margin-top: 5px;
+    }
+
+    @media (max-width: 680px) {
+      .main { flex-direction: column; }
+      .sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid #253550; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⬛ Dot Matrix LCD Simulator</h1>
+</header>
+
+<div class="main">
+  <!-- ── Settings sidebar ── -->
+  <div class="sidebar">
+    <section>
+      <h2>Display</h2>
+
+      <div class="control">
+        <div class="control-label">Resolution (cols × rows)</div>
+        <div class="res-row">
+          <input type="number" id="cols" value="128" min="8" max="640">
+          <span>×</span>
+          <input type="number" id="rows" value="64" min="8" max="480">
+        </div>
+      </div>
+
+      <div class="control">
+        <div class="control-label">Pixel Size <span class="val" id="pixel-size-val">6px</span></div>
+        <input type="range" id="pixel-size" min="1" max="20" value="6">
+      </div>
+
+      <div class="control">
+        <div class="control-label">Pixel Gap <span class="val" id="gap-val">1px</span></div>
+        <input type="range" id="gap" min="0" max="10" value="1">
+      </div>
+
+      <div class="control">
+        <div class="control-label">Color Scheme</div>
+        <select id="color-scheme">
+          <option value="green">Green (Classic LCD)</option>
+          <option value="amber">Amber</option>
+          <option value="blue">Blue</option>
+          <option value="gray">Grayscale</option>
+          <option value="white">White / Paper</option>
+        </select>
+      </div>
+    </section>
+
+    <section>
+      <h2>Text &amp; Rendering</h2>
+
+      <div class="control">
+        <div class="control-label">Font Size <span class="val" id="font-size-val">auto</span></div>
+        <input type="range" id="font-size" min="0" max="32" value="0">
+      </div>
+
+      <div class="control">
+        <div class="control-label">1-bit Threshold <span class="val" id="threshold-val">128</span></div>
+        <input type="range" id="threshold" min="1" max="255" value="128">
+      </div>
+
+      <div class="control">
+        <div class="control-label">Scroll Offset <span class="val" id="scroll-val">0px</span></div>
+        <input type="range" id="scroll" min="0" max="0" value="0">
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Main content ── -->
+  <div class="content">
+    <div class="display-area">
+      <canvas id="lcd-canvas"></canvas>
+    </div>
+
+    <div class="info-bar">
+      <span>LCD: <span class="val" id="info-res">—</span></span>
+      <span>Canvas: <span class="val" id="info-canvas">—</span></span>
+      <span>Content: <span class="val" id="info-content">—</span></span>
+    </div>
+
+    <div class="input-area">
+      <h2>Markdown Input</h2>
+      <textarea id="markdown-input" spellcheck="false"
+        placeholder="# Hello World&#10;&#10;Enter **markdown** text here..."></textarea>
+      <p class="hint">
+        Supports: # Headings · **bold** · *italic* · `code` · - lists · &gt; blockquotes · --- rules · ``` code blocks
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====================================================================
+// DOT MATRIX LCD SIMULATOR
+// ====================================================================
+
+// ── State ────────────────────────────────────────────────────────────
+const state = {
+  cols: 128,
+  rows: 64,
+  pixelSize: 6,
+  gap: 1,
+  fontSize: 0,       // 0 = auto
+  threshold: 128,
+  scroll: 0,
+  colorScheme: 'green',
+  contentHeight: 0,
+};
+
+// Color schemes: frame = gap/border color, off = unlit pixel, on = lit pixel
+const SCHEMES = {
+  green: { frame: '#4a6e00', off: '#8bac0f', on: '#0f380f' },
+  amber: { frame: '#6a3800', off: '#cc8800', on: '#380800' },
+  blue:  { frame: '#182858', off: '#94b8d8', on: '#000858' },
+  gray:  { frame: '#484848', off: '#b8b8b8', on: '#101010' },
+  white: { frame: '#909090', off: '#f0f0f0', on: '#080808' },
+};
+
+// ── Canvas elements ──────────────────────────────────────────────────
+const lcdCanvas = document.getElementById('lcd-canvas');
+const lcdCtx    = lcdCanvas.getContext('2d');
+
+// Off-screen render canvas (full tall canvas for word-wrapped content)
+let renderCanvas = null;
+let renderCtx    = null;
+
+// 1-bit pixel buffer for the visible LCD area
+let pixelBuffer  = null;   // Uint8Array, length = cols × rows, 0=off 1=on
+
+// ====================================================================
+// MARKDOWN PARSER
+// ====================================================================
+
+/**
+ * Parse a markdown string into an array of block objects.
+ * Supported block types: h, p, li, bq, code, hr, blank
+ */
+function parseMarkdown(md) {
+  const lines  = (md || '').split('\n');
+  const blocks = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Fenced code block (```)
+    if (line.trimStart().startsWith('```')) {
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !lines[i].trimStart().startsWith('```')) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      if (i < lines.length) i++;  // consume closing ```
+      blocks.push({ type: 'code', content: codeLines.join('\n') });
+      continue;
+    }
+
+    // ATX headings: # … through ######
+    const hMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (hMatch) {
+      blocks.push({ type: 'h', level: hMatch[1].length, content: hMatch[2].trim() });
+      i++;
+      continue;
+    }
+
+    // Horizontal rule: three or more -, *, _
+    if (/^(\s*[-*_]){3,}\s*$/.test(line) && line.trim().length >= 3) {
+      blocks.push({ type: 'hr' });
+      i++;
+      continue;
+    }
+
+    // Blockquote
+    if (/^\s*>/.test(line)) {
+      blocks.push({ type: 'bq', content: line.replace(/^\s*>\s?/, '') });
+      i++;
+      continue;
+    }
+
+    // Unordered list
+    const ulMatch = line.match(/^(\s*)[*\-+]\s+(.*)/);
+    if (ulMatch) {
+      blocks.push({
+        type: 'li',
+        ordered: false,
+        indent: Math.floor(ulMatch[1].length / 2),
+        content: ulMatch[2],
+      });
+      i++;
+      continue;
+    }
+
+    // Ordered list
+    const olMatch = line.match(/^(\s*)(\d+)\.\s+(.*)/);
+    if (olMatch) {
+      blocks.push({
+        type: 'li',
+        ordered: true,
+        number: parseInt(olMatch[2], 10),
+        indent: Math.floor(olMatch[1].length / 2),
+        content: olMatch[3],
+      });
+      i++;
+      continue;
+    }
+
+    // Blank line
+    if (line.trim() === '') {
+      blocks.push({ type: 'blank' });
+      i++;
+      continue;
+    }
+
+    // Paragraph
+    blocks.push({ type: 'p', content: line });
+    i++;
+  }
+
+  return blocks;
+}
+
+/**
+ * Parse inline markdown into an array of styled segments.
+ * Each segment: { text, bold, italic, code }
+ */
+function parseInline(text) {
+  const segs = [];
+  let i = 0, cur = '', bold = false, italic = false, code = false;
+
+  while (i < text.length) {
+    // Inline code (`...`)
+    if (text[i] === '`') {
+      if (cur) { segs.push({ text: cur, bold, italic, code }); cur = ''; }
+      code = !code;
+      i++;
+      continue;
+    }
+
+    // Bold (**…** or __…__)
+    if (!code && (text.slice(i, i + 2) === '**' || text.slice(i, i + 2) === '__')) {
+      if (cur) { segs.push({ text: cur, bold, italic, code }); cur = ''; }
+      bold = !bold;
+      i += 2;
+      continue;
+    }
+
+    // Italic (*…* or _…_)
+    if (!code && (text[i] === '*' || text[i] === '_')) {
+      if (cur) { segs.push({ text: cur, bold, italic, code }); cur = ''; }
+      italic = !italic;
+      i++;
+      continue;
+    }
+
+    cur += text[i];
+    i++;
+  }
+
+  if (cur) segs.push({ text: cur, bold, italic, code });
+  return segs.filter(s => s.text.length > 0);
+}
+
+// ====================================================================
+// RENDERING HELPERS
+// ====================================================================
+
+function autoFontSize() {
+  // Target ~8–10 lines of body text in the display height
+  return Math.max(5, Math.round(state.rows / 9));
+}
+
+function effectiveFontSize() {
+  return state.fontSize > 0 ? state.fontSize : autoFontSize();
+}
+
+/** Build a CSS font string for a segment. */
+function segFont(seg, size) {
+  const family = seg.code ? 'monospace' : 'sans-serif';
+  const sz     = seg.code ? Math.max(4, size - 1) : size;
+  const style  = (seg.bold && seg.italic) ? 'bold italic'
+               :  seg.bold                ? 'bold'
+               :  seg.italic              ? 'italic'
+               :                            '';
+  return [style, `${sz}px`, family].filter(Boolean).join(' ');
+}
+
+/**
+ * Word-wrap an array of inline segments into lines (array of arrays of segments).
+ * maxWidth is in the offscreen canvas pixel space.
+ */
+function wrapSegments(ctx, segments, maxWidth) {
+  if (!segments.length) return [[]];
+
+  const size = effectiveFontSize();
+
+  // Expand each segment into word/whitespace tokens
+  const tokens = [];
+  for (const seg of segments) {
+    const parts = seg.text.split(/(\s+)/);
+    for (const part of parts) {
+      if (part.length > 0) {
+        tokens.push({ text: part, bold: seg.bold, italic: seg.italic, code: seg.code });
+      }
+    }
+  }
+
+  const lines = [];
+  let curLine = [], curW = 0;
+
+  for (const tok of tokens) {
+    const isWS = /^\s+$/.test(tok.text);
+    ctx.font = segFont(tok, size);
+    const w = ctx.measureText(tok.text).width;
+
+    if (!isWS && curW + w > maxWidth && curLine.length > 0) {
+      lines.push(curLine);
+      curLine = [];
+      curW = 0;
+    }
+
+    // Skip leading whitespace at start of a new line
+    if (isWS && curLine.length === 0) continue;
+
+    curLine.push(tok);
+    curW += w;
+  }
+
+  if (curLine.length > 0) lines.push(curLine);
+  return lines.length > 0 ? lines : [[]];
+}
+
+/**
+ * Draw an array of inline segments onto the offscreen canvas, starting at (x, y).
+ */
+function drawSegs(ctx, segs, x, y, color) {
+  const size = effectiveFontSize();
+  ctx.fillStyle = color;
+  for (const seg of segs) {
+    ctx.font = segFont(seg, size);
+    ctx.fillText(seg.text, x, y);
+    x += ctx.measureText(seg.text).width;
+  }
+}
+
+/**
+ * Word-wrap a plain string with a given font, returning an array of string lines.
+ */
+function wrapText(ctx, text, maxWidth, font) {
+  ctx.font = font;
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+
+  for (const word of words) {
+    const test = cur ? cur + ' ' + word : word;
+    if (cur && ctx.measureText(test).width > maxWidth) {
+      lines.push(cur);
+      cur = word;
+    } else {
+      cur = test;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length > 0 ? lines : [''];
+}
+
+// ====================================================================
+// MARKDOWN → OFFSCREEN CANVAS
+// ====================================================================
+
+/**
+ * Render markdown onto a tall offscreen canvas (white bg, black text).
+ * Returns the total content height in canvas pixels.
+ */
+function renderMarkdownToCanvas(markdown) {
+  const W    = state.cols;
+  const TALL = Math.max(state.rows * 6, 512);
+
+  // (Re)create render canvas when resolution changes
+  if (!renderCanvas || renderCanvas.width !== W || renderCanvas.height !== TALL) {
+    renderCanvas = document.createElement('canvas');
+    renderCtx    = renderCanvas.getContext('2d');
+  }
+  renderCanvas.width  = W;
+  renderCanvas.height = TALL;
+
+  // White background, black text (color scheme is applied later during LCD draw)
+  renderCtx.fillStyle = '#ffffff';
+  renderCtx.fillRect(0, 0, W, TALL);
+  renderCtx.fillStyle    = '#000000';
+  renderCtx.textBaseline = 'top';
+
+  const fs  = effectiveFontSize();
+  const lh  = fs + Math.ceil(fs * 0.4);   // line-height ≈ 1.4× font-size
+  const pad = 2;                           // horizontal padding (px)
+
+  // Heading size scale factors (h1–h6)
+  const H_SCALES = [1.9, 1.55, 1.3, 1.1, 1.0, 0.9];
+
+  const blocks = parseMarkdown(markdown);
+  let y = pad;
+
+  for (const blk of blocks) {
+    if (y >= TALL) break;
+
+    switch (blk.type) {
+
+      case 'blank':
+        y += Math.ceil(lh * 0.5);
+        break;
+
+      case 'hr':
+        renderCtx.fillStyle = '#000000';
+        renderCtx.fillRect(pad, y + Math.floor(lh / 2), W - pad * 2, 1);
+        y += lh;
+        break;
+
+      case 'h': {
+        const scale = H_SCALES[blk.level - 1] || 1.0;
+        const hfs   = Math.max(fs, Math.round(fs * scale));
+        const hlh   = hfs + Math.ceil(hfs * 0.3);
+        const hFont = `bold ${hfs}px sans-serif`;
+        const lines = wrapText(renderCtx, blk.content, W - pad * 2, hFont);
+
+        renderCtx.fillStyle = '#000000';
+        for (const ln of lines) {
+          if (y >= TALL) break;
+          renderCtx.font = hFont;
+          renderCtx.fillText(ln, pad, y);
+          y += hlh;
+        }
+        y += 1;   // small gap after heading
+        break;
+      }
+
+      case 'p': {
+        const segs    = parseInline(blk.content);
+        const wrapped = wrapSegments(renderCtx, segs, W - pad * 2);
+        for (const line of wrapped) {
+          if (y >= TALL) break;
+          drawSegs(renderCtx, line, pad, y, '#000000');
+          y += lh;
+        }
+        break;
+      }
+
+      case 'bq': {
+        const borderW  = 1;
+        const indentW  = 4;
+        const segs     = parseInline(blk.content);
+        const wrapped  = wrapSegments(renderCtx, segs, W - pad * 2 - borderW - indentW);
+        const totalH   = wrapped.length * lh;
+
+        renderCtx.fillStyle = '#000000';
+        renderCtx.fillRect(pad, y, borderW, totalH);   // left border
+
+        for (const line of wrapped) {
+          if (y >= TALL) break;
+          // Render blockquote text slightly lighter via globalAlpha so it
+          // maps to gray and the threshold can reproduce the lighter look.
+          renderCtx.globalAlpha = 0.55;
+          drawSegs(renderCtx, line, pad + borderW + indentW, y, '#000000');
+          renderCtx.globalAlpha = 1.0;
+          y += lh;
+        }
+        break;
+      }
+
+      case 'li': {
+        const bulletX   = pad + blk.indent * (fs + 2);
+        const textX     = bulletX + fs + 2;
+        const bullet    = blk.ordered ? `${blk.number}.` : '\u2022';
+        const segs      = parseInline(blk.content);
+        const wrapped   = wrapSegments(renderCtx, segs, W - textX - pad);
+
+        renderCtx.fillStyle = '#000000';
+        renderCtx.font = `${fs}px sans-serif`;
+
+        for (let li = 0; li < wrapped.length; li++) {
+          if (y >= TALL) break;
+          if (li === 0) {
+            renderCtx.fillText(bullet, bulletX, y);
+          }
+          drawSegs(renderCtx, wrapped[li], textX, y, '#000000');
+          y += lh;
+        }
+        break;
+      }
+
+      case 'code': {
+        const cfs      = Math.max(4, fs - 1);
+        const clh      = cfs + Math.ceil(cfs * 0.4);
+        const codeFont = `${cfs}px monospace`;
+        const cLines   = blk.content.split('\n');
+
+        renderCtx.font      = codeFont;
+        renderCtx.fillStyle = '#000000';
+
+        for (const cl of cLines) {
+          if (y >= TALL) break;
+          renderCtx.fillText(cl, pad + 2, y);
+          y += clh;
+        }
+        y += 2;
+        break;
+      }
+    }
+  }
+
+  return y;  // total content height
+}
+
+// ====================================================================
+// 1-BIT CONVERSION
+// ====================================================================
+
+/**
+ * Sample the render canvas at the scroll-offset viewport, threshold to 1-bit,
+ * and store the result in pixelBuffer.
+ */
+function buildPixelBuffer() {
+  const W = state.cols;
+  const H = state.rows;
+
+  // Create a temporary canvas at LCD resolution and copy the visible slice
+  const view    = document.createElement('canvas');
+  view.width    = W;
+  view.height   = H;
+  const viewCtx = view.getContext('2d');
+  viewCtx.drawImage(renderCanvas, 0, state.scroll, W, H, 0, 0, W, H);
+
+  const imgData = viewCtx.getImageData(0, 0, W, H);
+  const data    = imgData.data;
+  const thr     = state.threshold;
+
+  pixelBuffer = new Uint8Array(W * H);
+  for (let i = 0; i < W * H; i++) {
+    const r    = data[i * 4];
+    const g    = data[i * 4 + 1];
+    const b    = data[i * 4 + 2];
+    // ITU-R BT.601 luma
+    const luma = (r * 299 + g * 587 + b * 114) / 1000;
+    // On white background, dark pixels are "on"
+    pixelBuffer[i] = luma < thr ? 1 : 0;
+  }
+}
+
+// ====================================================================
+// LCD CANVAS RENDERER
+// ====================================================================
+
+function renderLCD() {
+  if (!pixelBuffer) return;
+
+  const scheme  = SCHEMES[state.colorScheme];
+  const ps      = state.pixelSize;
+  const gap     = state.gap;
+  const cell    = ps + gap;               // size of each pixel cell
+
+  // Total canvas size: uniform gap border on all sides
+  const cw = state.cols * cell + gap;
+  const ch = state.rows * cell + gap;
+
+  lcdCanvas.width  = cw;
+  lcdCanvas.height = ch;
+
+  // Fill the frame/gap background
+  lcdCtx.fillStyle = scheme.frame;
+  lcdCtx.fillRect(0, 0, cw, ch);
+
+  // Draw each pixel
+  for (let row = 0; row < state.rows; row++) {
+    for (let col = 0; col < state.cols; col++) {
+      const on = pixelBuffer[row * state.cols + col] === 1;
+      lcdCtx.fillStyle = on ? scheme.on : scheme.off;
+      lcdCtx.fillRect(
+        gap + col * cell,
+        gap + row * cell,
+        ps,
+        ps,
+      );
+    }
+  }
+}
+
+// ====================================================================
+// MAIN RENDER LOOP
+// ====================================================================
+
+function render() {
+  const contentH    = renderMarkdownToCanvas(document.getElementById('markdown-input').value);
+  state.contentHeight = contentH;
+  buildPixelBuffer();
+  renderLCD();
+  updateUI();
+}
+
+function updateUI() {
+  const ps = state.pixelSize;
+  const g  = state.gap;
+  const cw = state.cols * (ps + g) + g;
+  const ch = state.rows * (ps + g) + g;
+
+  document.getElementById('info-res').textContent     = `${state.cols}×${state.rows}`;
+  document.getElementById('info-canvas').textContent  = `${cw}×${ch}px`;
+  document.getElementById('info-content').textContent = `${state.contentHeight}px tall`;
+
+  // Update scroll slider range
+  const scrollInput = document.getElementById('scroll');
+  const maxScroll   = Math.max(0, state.contentHeight - state.rows);
+  scrollInput.max   = maxScroll;
+  if (state.scroll > maxScroll) {
+    state.scroll      = maxScroll;
+    scrollInput.value = maxScroll;
+    document.getElementById('scroll-val').textContent = `${state.scroll}px`;
+  }
+}
+
+// ====================================================================
+// CONTROLS / EVENT HANDLERS
+// ====================================================================
+
+function bindSlider(id, key, labelId, fmt) {
+  const el  = document.getElementById(id);
+  const lbl = document.getElementById(labelId);
+  el.addEventListener('input', () => {
+    const v       = parseInt(el.value, 10);
+    state[key]    = v;
+    lbl.textContent = fmt ? fmt(v) : `${v}px`;
+    render();
+  });
+}
+
+function bindNumber(id, key, min, max) {
+  const el = document.getElementById(id);
+  el.addEventListener('change', () => {
+    const v    = Math.max(min, Math.min(max, parseInt(el.value, 10) || state[key]));
+    state[key] = v;
+    el.value   = v;
+    // Reset scroll when resolution changes
+    state.scroll = 0;
+    document.getElementById('scroll').value = 0;
+    document.getElementById('scroll-val').textContent = '0px';
+    render();
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindNumber('cols', 'cols', 8, 640);
+  bindNumber('rows', 'rows', 8, 480);
+
+  bindSlider('pixel-size', 'pixelSize', 'pixel-size-val');
+  bindSlider('gap',        'gap',       'gap-val');
+  bindSlider('font-size',  'fontSize',  'font-size-val', v => v === 0 ? 'auto' : `${v}px`);
+  bindSlider('threshold',  'threshold', 'threshold-val', v => String(v));
+  bindSlider('scroll',     'scroll',    'scroll-val');
+
+  document.getElementById('color-scheme').addEventListener('change', function () {
+    state.colorScheme = this.value;
+    render();
+  });
+
+  let debounce = null;
+  document.getElementById('markdown-input').addEventListener('input', () => {
+    clearTimeout(debounce);
+    debounce = setTimeout(render, 80);
+  });
+
+  // Default markdown content demonstrating supported syntax
+  document.getElementById('markdown-input').value =
+`# Hello, World!
+
+**Dot Matrix** LCD Simulator
+
+- 1-bit monochrome display
+- Adjustable resolution
+- Markdown input supported
+
+> Use the sidebar controls
+> to customise the display.
+
+## Code example
+
+\`\`\`
+const lcd = new Display(
+  128, 64
+);
+lcd.render(markdown);
+\`\`\`
+
+---
+
+*Scroll down for more!*
+
+### Heading 3
+#### Heading 4
+
+Normal paragraph with **bold**,
+*italic*, and \`inline code\`.`;
+
+  render();
+});
+</script>
+</body>
+</html>
